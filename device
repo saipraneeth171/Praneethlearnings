@@ -1,3 +1,6 @@
+[  "DEV_100153": "HostName=eventIOT.azure-devices.net;DeviceId=DEV_100153;SharedAccessKey=4fiqAjse4vt4uUWKYzEvG+Bj1HWdMN3Wd1+gn+LzPaI=",
+  "DEV_100202": "HostName=stallion.azure-devices.net;DeviceId=DEV_100202;SharedAccessKey=dwOTza9Z8oztjaCpvHkimlfwy7dp2oIfk1QcvEXmRzc="
+]
 === Device IDs from IoT Telematics Dataset ===
 Generated on: 2025-06-10 08:01:26
 Total devices: 510
