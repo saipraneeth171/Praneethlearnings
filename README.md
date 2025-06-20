@@ -20,11 +20,11 @@ logger = logging.getLogger(__name__)
 class IoTStreamingConfig:
     def __init__(self):
         # File paths
-        self.TELEMATICS_DATA_FILE = r"E:\Data\IOT_Telematics\iot_telematics_data.json"
+        self.TELEMATICS_DATA_FILE = r"C:\Users\path\Downloads\iot_telematics_data.json"
         self.DEVICE_CREDENTIALS_FILE = "device_connection_strings.json"
         
         # Azure IoT Hub settings
-        self.IOT_HUB_NAME = **mention-your-hostname**
+        self.IOT_HUB_NAME = "stallion.azure-devices.net"
         self.MQTT_PORT = 8883
         self.MQTT_KEEPALIVE = 60
         
