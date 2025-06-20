@@ -1,0 +1,131 @@
+# Databricks notebook source
+# MAGIC %md
+# MAGIC # 🔗 Streaming Data from Azure Event Hubs to Azure Databricks using Kafka API
+# MAGIC
+# MAGIC **Author**: Tech Titans  
+# MAGIC **Created**: 19_June 2025_  
+# MAGIC **Project**: _Real-time IoT Data Ingestion with Azure Event Hubs & Databricks_
+# MAGIC
+# MAGIC ---
+# MAGIC
+# MAGIC This notebook demonstrates how to stream real-time telemetry data from **Azure Event Hubs** into **Azure Databricks** using the **Kafka-compatible endpoint** of Event Hubs.
+# MAGIC
+# MAGIC ##  Why Kafka via Event Hubs?
+# MAGIC - Azure Event Hubs is **Kafka-compatible**, so we can use Databricks' built-in Kafka support.
+# MAGIC - This enables low-latency, reliable, scalable real-time data ingestion.
+# MAGIC - Supports **Structured Streaming**, allowing easy data transformations and writes to Delta Lake.
+# MAGIC
+# MAGIC ---
+# MAGIC
+# MAGIC ##  Requirements
+# MAGIC
+# MAGIC - Azure Event Hubs namespace with Kafka enabled
+# MAGIC - A topic (Event Hub) created inside the namespace
+# MAGIC - A Shared Access Policy with `Listen` permissions
+# MAGIC - Azure Databricks workspace with a running cluster
+# MAGIC - The Event Hub's **connection string** and **topic name**
+# MAGIC
+# MAGIC ---
+# MAGIC
+# MAGIC ## 📥 Incoming Data (Sample IoT Telemetry)
+# MAGIC
+# MAGIC Sample format of JSON messages sent to Event Hubs:
+# MAGIC ```json
+# MAGIC {
+# MAGIC   "customer_id": 100209,
+# MAGIC   "device_id": "DEV_100209",
+# MAGIC   "trip_id": "TRIP_100209_2506130627",
+# MAGIC   "events": [
+# MAGIC     {
+# MAGIC       "timestamp": "2025-06-13T06:27:00Z",
+# MAGIC       "event_type": "trip_start",
+# MAGIC       "speed": 0
+# MAGIC     },
+# MAGIC     {
+# MAGIC       "timestamp": "2025-06-13T06:36:25.256738Z",
+# MAGIC       "event_type": "avg_speed",
+# MAGIC       "speed": 25.2
+# MAGIC     }
+# MAGIC     ...
+# MAGIC   ]
+# MAGIC }
+# MAGIC
+
+# COMMAND ----------
+
+# DBTITLE 1,Streaming data from event hub using kafka
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
+
+# Step 1: Define Event Hubs Kafka connection configuration
+readConnectionString = "Endpoint=sb://name.servicebus.windows.net/;" \
+                       "SharedAccessKeyName=neweventpolicy;" \
+                       "SharedAccessKey=xxxxxxxxx;" \
+                       "EntityPath=stallion"
+
+topic_name = "stallion" 
+eh_namespace_name = "name"
+    
+eh_sasl = (
+    'kafkashaded.org.apache.kafka.common.security.plain.PlainLoginModule '
+    f'required username="$ConnectionString" password="{readConnectionString}";'
+)
+
+bootstrap_servers = f"{eh_namespace_name}.servicebus.windows.net:9093"
+    
+kafka_options = {
+    "kafka.bootstrap.servers": bootstrap_servers,
+    "kafka.sasl.mechanism": "PLAIN",
+    "kafka.security.protocol": "SASL_SSL",
+    "kafka.request.timeout.ms": "60000",
+    "kafka.session.timeout.ms": "30000",
+    "startingOffsets": "earliest",
+    "kafka.sasl.jaas.config": eh_sasl,
+    "subscribe": topic_name,
+    "failOnDataLoss": "false",
+    "kafka.fetch.min.bytes": "1"
+}
+
+# Step 2: Read raw JSON from Event Hub Kafka Stream
+# Read from Event Hub Kafka stream
+df_kafka_raw_new = spark.readStream.format("kafka").options(**kafka_options).load()
+
+from pyspark.sql.functions import regexp_replace
+
+# Extract the message as string
+df_kafka_str_new = df_kafka_raw_new.selectExpr(
+    "*", 
+    "CAST(value AS STRING) as valuestring", 
+    "CAST(key AS STRING) as keystring"
+
+)
+
+
+# Step 3: Write Raw JSON Data to Delta Lake (Bronze Layer)
+delta_json_query = df_kafka_str_new.writeStream \
+    .format("delta") \
+    .outputMode("append") \
+    .option("checkpointLocation", "/mnt/techtitans/checkpoints/bronze_json") \
+    .option("mergeSchema", "true") \
+    .start("/mnt/techtitans/bronze/bronze_json")
+
+# COMMAND ----------
+
+# DBTITLE 1,code1-raw to bronze testing working scenario
+from pyspark.sql.functions import col
+
+df_kafka_raw = spark.readStream.format("kafka").options(**kafka_options).load()
+
+df_kafka_str_tec = df_kafka_raw.selectExpr(
+    "CAST(value AS STRING) as raw_json",
+    "CAST(timestamp AS TIMESTAMP) as event_ts"
+)
+
+# Write raw JSON to Bronze Delta table
+df_kafka_str_tec.writeStream \
+    .format("delta") \
+    .outputMode("append") \
+    .option("mergeSchema", "true")\
+    .option("checkpointLocation", "/mnt/stallion/checkpoints/bronze/bronze_json") \
+    .start("/mnt/stallion/bronze_raw/bronze_json")
